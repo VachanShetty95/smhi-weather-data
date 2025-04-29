@@ -15,6 +15,29 @@
             
             <div v-if="selectedCity" class="mt-3">
               <h6>Selected City: {{ selectedCity.name }}</h6>
+              <div class="mt-2">
+                <button 
+                  class="btn btn-sm btn-outline-primary me-2" 
+                  :class="{'btn-primary text-white': !showHistorical && !showMonthly}" 
+                  @click="toggleDataType('recent')"
+                >
+                  Recent Data
+                </button>
+                <button 
+                  class="btn btn-sm btn-outline-primary me-2" 
+                  :class="{'btn-primary text-white': showMonthly}" 
+                  @click="toggleDataType('monthly')"
+                >
+                  Monthly Data
+                </button>
+                <button 
+                  class="btn btn-sm btn-outline-primary" 
+                  :class="{'btn-primary text-white': showHistorical}" 
+                  @click="toggleDataType('historical')"
+                >
+                  Historical Data
+                </button>
+              </div>
               <button class="btn btn-sm btn-outline-secondary mt-2" @click="goBackToAllCities">
                 Back to All Cities
               </button>
@@ -95,10 +118,20 @@ export default defineComponent({
     const loading = ref(true);
     const error = ref('');
     const selectedCity = ref(null);
+    const showHistorical = ref(false);
+    const showMonthly = ref(false);
     
     const chartTitle = computed(() => {
       if (selectedCity.value) {
-        return `Temperature Data for ${selectedCity.value.name}`;
+        let title = `Temperature Data for ${selectedCity.value.name}`;
+        if (showHistorical.value) {
+          title += ' (Historical)';
+        } else if (showMonthly.value) {
+          title += ' (Monthly)';
+        } else {
+          title += ' (Recent)';
+        }
+        return title;
       }
       return 'Temperature Data for Major Swedish Cities';
     });
@@ -109,10 +142,11 @@ export default defineComponent({
         loading.value = true;
         error.value = '';
         selectedCity.value = null;
+        showHistorical.value = false;
+        showMonthly.value = false;
         
-        const apiUrl = `${window.location.origin}/api/graph/cities`;
-        console.log('Fetching data from:', apiUrl);
-        const response = await axios.get(apiUrl);
+        console.log('Fetching data from:', '/api/graph/cities');
+        const response = await axios.get('/api/graph/cities');
         console.log('Response received:', response.status);
         chartData.value = response.data;
         
@@ -129,24 +163,44 @@ export default defineComponent({
     };
     
     // Fetch data for a specific city
-    const fetchCityData = async (cityName) => {
+    const fetchCityData = async (cityName, dataType = 'recent') => {
       try {
         loading.value = true;
         error.value = '';
         
-        const apiUrl = `${window.location.origin}/api/graph/city/${cityName}`;
-        console.log('Fetching data from:', apiUrl);
-        const response = await axios.get(apiUrl);
+        let endpoint;
+        if (dataType === 'historical') {
+          endpoint = `/api/graph/historical/${cityName}`;
+        } else if (dataType === 'monthly') {
+          endpoint = `/api/graph/monthly/${cityName}`;
+        } else {
+          endpoint = `/api/graph/city/${cityName}`;
+        }
+          
+        console.log('Fetching data from:', endpoint);
+        const response = await axios.get(endpoint);
         console.log('Response received:', response.status);
         chartData.value = response.data;
         
+        // Update the city info if it was found through search
+        if (response.data.station_name && selectedCity.value) {
+          selectedCity.value.station_name = response.data.station_name;
+          selectedCity.value.station_id = response.data.station_id;
+        }
       } catch (err) {
         console.error(`Error fetching data for ${cityName}:`, err.message);
         if (err.response) {
           console.error('Response data:', err.response.data);
           console.error('Response status:', err.response.status);
+          
+          if (err.response.status === 404) {
+            error.value = err.response.data.detail || `No data found for ${cityName}`;
+          } else {
+            error.value = `Failed to load data for ${cityName}. Please try again.`;
+          }
+        } else {
+          error.value = `Failed to load data for ${cityName}. Please try again.`;
         }
-        error.value = `Failed to load data for ${cityName}. Please try again.`;
         chartData.value = null;
       } finally {
         loading.value = false;
@@ -155,7 +209,8 @@ export default defineComponent({
     
     const handleCitySelect = (city) => {
       selectedCity.value = city;
-      fetchCityData(city.name);
+      const dataType = showHistorical.value ? 'historical' : (showMonthly.value ? 'monthly' : 'recent');
+      fetchCityData(city.name, dataType);
     };
     
     const selectMajorCity = (cityName) => {
@@ -163,11 +218,32 @@ export default defineComponent({
         id: MAJOR_CITIES[cityName],
         name: cityName
       };
-      fetchCityData(cityName);
+      const dataType = showHistorical.value ? 'historical' : (showMonthly.value ? 'monthly' : 'recent');
+      fetchCityData(cityName, dataType);
+    };
+    
+    const toggleDataType = (dataType) => {
+      if (selectedCity.value) {
+        const wasHistorical = showHistorical.value;
+        const wasMonthly = showMonthly.value;
+        
+        showHistorical.value = dataType === 'historical';
+        showMonthly.value = dataType === 'monthly';
+        
+        if (wasHistorical !== showHistorical.value || wasMonthly !== showMonthly.value) {
+          fetchCityData(selectedCity.value.name, dataType);
+        }
+      }
+    };
+    
+    const toggleHistorical = (value) => {
+      toggleDataType(value ? 'historical' : 'recent');
     };
     
     const goBackToAllCities = () => {
       selectedCity.value = null;
+      showHistorical.value = false;
+      showMonthly.value = false;
       fetchAllCitiesData();
     };
     
@@ -181,9 +257,13 @@ export default defineComponent({
       loading,
       error,
       selectedCity,
+      showHistorical,
+      showMonthly,
       chartTitle,
       handleCitySelect,
       selectMajorCity,
+      toggleHistorical,
+      toggleDataType,
       goBackToAllCities,
       MAJOR_CITIES
     };

@@ -62,11 +62,15 @@ export default defineComponent({
         }
       } else if (props.data.temperatures) {
         // Single city data
+        const cityName = props.data.city;
+        const label = props.data.station_name && props.data.station_name !== cityName ? 
+          `${cityName} (${props.data.station_name})` : cityName;
+        
         datasets.push({
-          label: props.data.city,
+          label: label,
           data: props.data.temperatures,
-          borderColor: getCityColor(props.data.city),
-          backgroundColor: getCityColor(props.data.city),
+          borderColor: getCityColor(cityName),
+          backgroundColor: getCityColor(cityName),
           tension: 0.3,
           pointRadius: 3
         });
@@ -85,8 +89,8 @@ export default defineComponent({
         });
       }
 
-      // Create chart
-      chart = new Chart(ctx, {
+      // Create chart configuration
+      const chartConfig = {
         type: 'line',
         data: {
           labels: props.data.months,
@@ -121,12 +125,41 @@ export default defineComponent({
             x: {
               title: {
                 display: true,
-                text: 'Month'
+                text: props.data.period === 'historical' ? 'Year-Month' : 
+                      props.data.period === 'monthly' ? 'Year-Month (Last 12 Months)' : 'Month'
               }
             }
           }
         }
-      });
+      };
+      
+      // Add additional info for historical data
+      if (props.data.period === 'historical' && props.data.time_range) {
+        chartConfig.options.plugins.title.text = [
+          props.title,
+          `Data range: ${props.data.time_range.start} to ${props.data.time_range.end}`
+        ];
+        
+        // For historical data with many data points, we might need to adjust axis display
+        if (props.data.months && props.data.months.length > 30) {
+          chartConfig.options.scales.x.ticks = {
+            maxTicksLimit: 20,
+            maxRotation: 45,
+            minRotation: 45
+          };
+        }
+      }
+      
+      // Add additional info for monthly data
+      if (props.data.period === 'monthly' && props.data.time_range) {
+        chartConfig.options.plugins.title.text = [
+          props.title,
+          `Monthly data from ${props.data.time_range.start} to ${props.data.time_range.end}`
+        ];
+      }
+
+      // Create chart
+      chart = new Chart(ctx, chartConfig);
     };
 
     onMounted(() => {
