@@ -1,0 +1,43 @@
+services:
+  # Backend service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smhi-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - CORS_ORIGINS=http://localhost,http://frontend,*
+    networks:
+      - smhi-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: smhi-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    environment:
+      - VUE_APP_API_URL=http://backend:8000
+      - BACKEND_HOST=backend
+    networks:
+      - smhi-network
+    restart: unless-stopped
+
+# Define a network for the services to communicate
+networks:
+  smhi-network:
+    driver: bridge 
